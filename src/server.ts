@@ -17,9 +17,9 @@ httpServer.on("error", (error: NodeJS.ErrnoException) => {
 })
 
 httpServer.on("listening", () => {
-  logger.info(`HTTP server listening at ${process.env.port}`)
+  logger.info(`HTTP server listening at ${process.env.PORT}`)
 })
 
-httpServer.listen(process.env.port)
+httpServer.listen(process.env.PORT)
 
 export default httpServer
