@@ -3,6 +3,7 @@ import * as multer from 'multer'
 import * as path from 'path'
 import Panorama from '../models/panorama'
 import { Request, Response } from 'express'
+import * as sharp from 'sharp';
 
 const router = express.Router()
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
@@ -31,6 +32,10 @@ const upload = multer({ storage })
 router.post('/upload', (upload.single('image') as unknown) as express.RequestHandler, async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file' })
+    await sharp(req.file.path)
+      .resize(900)
+      .toFile(path.join(UPLOAD_DIR, 'lowquality-' + (req.file as any).filename))
+
     const { originalname, filename, mimetype, size } = req.file as any
     const doc = await Panorama.create({ name: originalname, filename, mimetype, size })
     res.json(doc)
@@ -75,9 +80,13 @@ router.get('/', async (req: Request, res: Response) => {
 */
 router.get('/file/:name', async (req: Request, res: Response) => {
   try {
-    const doc = await Panorama.findOne({ name: req.params.name })
+    const isLowQuality = req.params.name.startsWith('lowquality-');
+    const actualName = isLowQuality ? req.params.name.replace('lowquality-', '') : req.params.name;
+    const doc = await Panorama.findOne({
+      name: actualName
+    })
     if (!doc) return res.status(404).end()
-    const filepath = path.join(UPLOAD_DIR, doc.filename)
+    const filepath = path.join(UPLOAD_DIR, isLowQuality ? doc.filename : 'lowquality-' + doc.filename)
     res.sendFile(filepath)
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -209,7 +218,9 @@ router.get('/analytics/bar-chart', async (req: Request, res: Response) => {
             }
           },
           activeCount: {
-            $sum: { $cond: [ { $eq: [ '$isActive', true ] }, 1, 0 ] }
+            $sum: {
+              $cond: [ { $and: [ { $eq: [ '$isActive', true ] }, { $ne: [ '$bookmarked', true ] } ] }, 1, 0 ]
+            }
           },
           inactiveCount: {
             $sum: { $cond: [ { $eq: [ '$isActive', false ] }, 1, 0 ] }
@@ -245,7 +256,7 @@ router.get('/analytics/bar-chart', async (req: Request, res: Response) => {
 */
 router.get('/analytics/pie-chart', async (req: Request, res: Response) => {
   try {
-    const active = await Panorama.countDocuments({ isActive: true })
+    const active = await Panorama.countDocuments({ bookmarked: false, isActive: true })
     const bookmark = await Panorama.countDocuments({ bookmarked: true, isActive: true })
     const inactive = await Panorama.countDocuments({ isActive: false })
 
